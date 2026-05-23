@@ -25,6 +25,7 @@ _testmain.go
 
 .DS_Store
 .idea
+AGENTS.md
 log
 data
 conf
