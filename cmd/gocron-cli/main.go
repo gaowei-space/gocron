@@ -353,7 +353,7 @@ func valuesFromJSONFile(filename string) (url.Values, error) {
 	if err := json.Unmarshal(body, &data); err != nil {
 		return valuesFromSimpleYAML(body)
 	}
-	values := url.Values{}
+	values := defaultTaskValues()
 	for key, value := range data {
 		switch v := value.(type) {
 		case string:
@@ -372,7 +372,7 @@ func valuesFromJSONFile(filename string) (url.Values, error) {
 }
 
 func valuesFromSimpleYAML(body []byte) (url.Values, error) {
-	values := url.Values{}
+	values := defaultTaskValues()
 	lines := strings.Split(string(body), "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -390,6 +390,29 @@ func valuesFromSimpleYAML(body []byte) (url.Values, error) {
 		}
 	}
 	return values, nil
+}
+
+func defaultTaskValues() url.Values {
+	values := url.Values{}
+	values.Set("tag", "")
+	values.Set("level", "1")
+	values.Set("dependency_status", "1")
+	values.Set("dependency_task_id", "")
+	values.Set("spec", "")
+	values.Set("protocol", "2")
+	values.Set("http_method", "1")
+	values.Set("host_id", "")
+	values.Set("timeout", "0")
+	values.Set("multi", "2")
+	values.Set("notify_status", "1")
+	values.Set("notify_type", "2")
+	values.Set("notify_receiver_id", "")
+	values.Set("notify_keyword", "")
+	values.Set("retry_times", "0")
+	values.Set("retry_interval", "0")
+	values.Set("status", "1")
+	values.Set("remark", "")
+	return values
 }
 
 func loadProfile(name string) (*config, *profile, error) {

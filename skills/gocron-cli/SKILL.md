@@ -64,7 +64,41 @@ Without `--json`, the CLI prints the API message and raw data for quick human in
 
 Create and update tasks from a flat JSON or simple `key: value` YAML file. The parser supports scalar strings, numbers, and booleans only; nested YAML is not supported.
 
-Common fields mirror the existing Web form names:
+Omitted optional fields use the Web create-page defaults:
+
+- `level: 1` 主任务
+- `dependency_status: 1` 强依赖
+- `protocol: 2` shell
+- `http_method: 1` GET
+- `timeout: 0`
+- `multi: 2` 单实例运行=是
+- `retry_times: 0`
+- `retry_interval: 0`
+- `notify_status: 1` 不通知
+- `notify_type: 2` 邮件
+- `status: 1` 启用
+- `tag`、`dependency_task_id`、`host_id`、`notify_receiver_id`、`notify_keyword`、`remark` default to empty strings.
+
+Required fields for a default shell parent task:
+
+```yaml
+name: nightly-sync
+spec: "0 0 2 * * *"
+command: "php /data/app/index.php sync/run"
+host_id: "1"
+```
+
+Required-field rules:
+
+- `name` is always required.
+- `command` is always required. For HTTP tasks it must be an `http://` or `https://` URL.
+- `spec` is required for parent tasks (`level: 1`); child tasks (`level: 2`) do not use `spec`.
+- `host_id` is required for shell/RPC tasks (`protocol: 2`); HTTP tasks (`protocol: 1`) do not use `host_id`.
+- Notification receiver fields are required only when notification is enabled.
+
+For `task update`, omitted optional fields are still filled with Web defaults. To preserve existing optional values, inspect the task first and include those values in the update file.
+
+Full example with explicit Web defaults:
 
 ```yaml
 name: nightly-sync
@@ -75,14 +109,14 @@ spec: "0 0 2 * * *"
 protocol: 2
 command: "php /data/app/index.php sync/run"
 host_id: "1"
-timeout: 3600
+timeout: 0
 multi: 2
 retry_times: 0
 retry_interval: 0
-tag: ops
-remark: "nightly sync"
+tag: ""
+remark: ""
 notify_status: 1
-notify_type: 1
+notify_type: 2
 notify_receiver_id: ""
 notify_keyword: ""
 status: 1
