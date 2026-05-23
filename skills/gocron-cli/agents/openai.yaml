@@ -1,0 +1,4 @@
+interface:
+  display_name: "gocron-cli"
+  short_description: "Operate gocron through the CLI"
+  default_prompt: "Use $gocron-cli to inspect or manage gocron cron tasks with browser-authorized CLI access."
