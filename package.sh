@@ -194,6 +194,14 @@ package_gocron_node() {
     run
 }
 
+package_gocron_cli() {
+    BINARY_NAME='gocron-cli'
+    MAIN_FILE="./cmd/gocron-cli/main.go"
+    INCLUDE_FILE=()
+
+    run
+}
+
 # p 平台 linux darwin windows
 # a 架构 386 amd64
 # v 版本号  默认取git最新tag
@@ -213,4 +221,4 @@ done
 
 package_gocron
 package_gocron_node
-
+package_gocron_cli

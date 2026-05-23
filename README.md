@@ -8,11 +8,20 @@
 
 ## 项目简介
 
-> 该项目fork于[ouqiang/gocron](https://github.com/ouqiang/gocron)，依据自己喜好和实际需求进行了功能迭代，发布了 **1.6** 版本。
+> 该项目fork于[ouqiang/gocron](https://github.com/ouqiang/gocron)，依据自己喜好和实际需求进行了功能迭代，当前发布 **1.6.4** 版本。
 
 **[Gocron-定时任务管理系统](https://github.com/gaowei-space/gocron)**，使用Go语言开发的轻量级定时任务集中调度和管理系统, 用于替代**Linux-crontab**
 
 ## 迭代
+
+### v1.6.4
+
+* 新增 `gocron-cli`，支持通过浏览器授权后管理 cron 任务
+* CLI 支持任务查询、详情、创建、修改、启停、手动运行、停止运行实例、日志查询和主机查询
+* CLI 默认不支持删除 cron 任务，删除仍需在 Web 后台操作
+* 新增独立 Agent REST API，使用短期 access token 和轮换 refresh token
+* 新增 CLI 设备授权管理，超级管理员可在 Web 后台查看和撤销已授权设备
+* 新增 agent 操作审计表，记录授权、刷新、写操作、运行和停止等行为
 
 ### v1.6
 
@@ -72,6 +81,34 @@
 - 查看任务执行结果日志
 
 - 任务执行结果通知, 支持邮件、Slack、Webhook
+
+- `gocron-cli` 命令行管理，适合 agent 或自动化脚本使用
+
+## gocron-cli
+
+`gocron-cli` 使用浏览器授权流程，不需要手动复制长期 token。第一版仅支持超级管理员授权使用。
+
+```bash
+gocron-cli login --server https://your-gocron.example.com
+gocron-cli task list
+gocron-cli task get 1
+gocron-cli task create --file task.yaml
+gocron-cli task update 1 --file task.yaml
+gocron-cli task enable 1
+gocron-cli task disable 1
+gocron-cli task run 1
+gocron-cli task logs 1
+gocron-cli task stop 1 100
+gocron-cli host list
+```
+
+需要机器可读输出时添加 `--json`：
+
+```bash
+gocron-cli --json task list
+```
+
+CLI 凭据保存在本机用户目录下的 `.gocron/config.json`。服务端仅保存 refresh token hash，超级管理员可在 Web 后台的 `Agent授权` 页面撤销设备授权。
 
 #### 了解更多
 

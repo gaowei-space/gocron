@@ -22,6 +22,8 @@ import NotificationWebhook from '../pages/system/notification/webhook'
 
 import Install from '../pages/install/index'
 import LoginLog from '../pages/system/loginLog'
+import AgentAuthorize from '../pages/agent/authorize'
+import AgentDevices from '../pages/agent/devices'
 
 Vue.use(Router)
 
@@ -151,6 +153,19 @@ const router = new Router({
       path: '/system/login-log',
       name: 'login-log',
       component: LoginLog
+    },
+    {
+      path: '/agent/authorize',
+      name: 'agent-authorize',
+      component: AgentAuthorize,
+      meta: {
+        noNeedAdmin: true
+      }
+    },
+    {
+      path: '/agent/devices',
+      name: 'agent-devices',
+      component: AgentDevices
     }
   ]
 })

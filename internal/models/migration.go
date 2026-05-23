@@ -17,6 +17,7 @@ func (migration *Migration) Install(dbName string) error {
 	task := new(Task)
 	tables := []interface{}{
 		&User{}, task, &TaskLog{}, &Host{}, setting, &LoginLog{}, &TaskHost{},
+		&AgentDeviceAuthorization{}, &AgentDeviceAuthorizationRequest{}, &AgentAuditLog{},
 	}
 	for _, table := range tables {
 		exist, err := Db.IsTableExist(table)
@@ -43,7 +44,7 @@ func (migration *Migration) Upgrade(oldVersionId int) {
 		return
 	}
 
-	versionIds := []int{110, 122, 130, 140, 150, 155}
+	versionIds := []int{110, 122, 130, 140, 150, 155, 163, 164}
 	upgradeFuncs := []func(*xorm.Session) error{
 		migration.upgradeFor110,
 		migration.upgradeFor122,
@@ -51,6 +52,8 @@ func (migration *Migration) Upgrade(oldVersionId int) {
 		migration.upgradeFor140,
 		migration.upgradeFor150,
 		migration.upgradeFor155,
+		migration.upgradeFor163,
+		migration.upgradeFor164,
 	}
 
 	startIndex := -1
@@ -248,4 +251,30 @@ func (migration *Migration) upgradeFor155(session *xorm.Session) error {
 	logger.Info("已升级到v1.5.5\n")
 
 	return err
+}
+
+func (migration *Migration) upgradeFor163(session *xorm.Session) error {
+	logger.Info("开始升级到v1.6.3")
+
+	err := session.Sync2(new(AgentDeviceAuthorization), new(AgentDeviceAuthorizationRequest), new(AgentAuditLog))
+	if err != nil {
+		return err
+	}
+
+	logger.Info("已升级到v1.6.3\n")
+
+	return nil
+}
+
+func (migration *Migration) upgradeFor164(session *xorm.Session) error {
+	logger.Info("开始升级到v1.6.4")
+
+	err := session.Sync2(new(AgentDeviceAuthorization), new(AgentDeviceAuthorizationRequest))
+	if err != nil {
+		return err
+	}
+
+	logger.Info("已升级到v1.6.4\n")
+
+	return nil
 }

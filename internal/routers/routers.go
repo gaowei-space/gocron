@@ -14,6 +14,7 @@ import (
 	"github.com/ouqiang/gocron/internal/modules/app"
 	"github.com/ouqiang/gocron/internal/modules/logger"
 	"github.com/ouqiang/gocron/internal/modules/utils"
+	"github.com/ouqiang/gocron/internal/routers/agent"
 	"github.com/ouqiang/gocron/internal/routers/host"
 	"github.com/ouqiang/gocron/internal/routers/install"
 	"github.com/ouqiang/gocron/internal/routers/loginlog"
@@ -132,6 +133,35 @@ func Register(m *macaron.Macaron) {
 		m.Post("/task/disable/:id", task.Disable)
 	}, apiAuth)
 
+	// Agent API
+	m.Group("/agent/v1", func() {
+		m.Group("/auth", func() {
+			m.Post("/device/start", agent.StartDeviceAuthorization)
+			m.Post("/device/token", agent.DeviceToken)
+			m.Post("/device/approve", agent.ApproveDeviceAuthorization)
+			m.Post("/token/refresh", agent.RefreshToken)
+		})
+		m.Group("/auth", func() {
+			m.Post("/logout", agent.Logout)
+		}, agent.Auth)
+		m.Group("/auth", func() {
+			m.Get("/devices", agent.Devices)
+			m.Delete("/devices/:device_id", agent.RevokeDevice)
+		}, agent.WebSuperAdminAuth)
+		m.Group("", func() {
+			m.Get("/tasks", agent.TaskList)
+			m.Get("/tasks/:id", agent.TaskDetail)
+			m.Post("/tasks", binding.Bind(task.TaskForm{}), agent.TaskCreate)
+			m.Put("/tasks/:id", binding.Bind(task.TaskForm{}), agent.TaskUpdate)
+			m.Post("/tasks/:id/enable", agent.TaskEnable)
+			m.Post("/tasks/:id/disable", agent.TaskDisable)
+			m.Post("/tasks/:id/run", agent.TaskRun)
+			m.Get("/tasks/:id/logs", agent.TaskLogs)
+			m.Post("/tasks/:task_id/runs/:log_id/stop", agent.TaskStop)
+			m.Get("/hosts", agent.HostList)
+		}, agent.Auth)
+	}, agent.Context)
+
 	// 404错误
 	m.NotFound(func(ctx *macaron.Context) string {
 		jsonResp := utils.JsonResponse{}
@@ -193,6 +223,10 @@ func ipAuth(ctx *macaron.Context) {
 	if !app.Installed {
 		return
 	}
+	uri := strings.TrimRight(ctx.Req.URL.Path, "/")
+	if strings.HasPrefix(uri, "/agent/v1") {
+		return
+	}
 	allowIpsStr := app.Setting.AllowIps
 	if allowIpsStr == "" {
 		return
@@ -220,7 +254,7 @@ func userAuth(ctx *macaron.Context) {
 		return
 	}
 	uri := strings.TrimRight(ctx.Req.URL.Path, "/")
-	if strings.HasPrefix(uri, "/v1") {
+	if strings.HasPrefix(uri, "/v1") || strings.HasPrefix(uri, "/agent/v1") {
 		return
 	}
 	excludePaths := []string{"", "/user/login", "/install/status"}
@@ -244,7 +278,7 @@ func urlAuth(ctx *macaron.Context) {
 		return
 	}
 	uri := strings.TrimRight(ctx.Req.URL.Path, "/")
-	if strings.HasPrefix(uri, "/v1") {
+	if strings.HasPrefix(uri, "/v1") || strings.HasPrefix(uri, "/agent/v1") {
 		return
 	}
 	// 普通用户允许访问的URL地址

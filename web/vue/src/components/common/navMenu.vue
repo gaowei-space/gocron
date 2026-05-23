@@ -32,6 +32,12 @@
           </el-menu-item>
         </el-col>
         <el-col :span="2">
+          <el-menu-item v-if="this.$store.getters.user.isSuperAdmin" index="/agent/devices">
+            <i class="el-icon-mobile-phone"></i>
+            <span slot="title">Agent授权</span>
+          </el-menu-item>
+        </el-col>
+        <el-col :span="2">
           <el-menu-item v-if="this.$store.getters.user.isSuperAdmin" index="/system">
             <i class="el-icon-setting"></i>
             <span slot="title">系统管理</span>

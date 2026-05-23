@@ -115,5 +115,10 @@ export default {
       }
     })
     handle(promise, next)
+  },
+
+  delete (uri, data, next) {
+    const promise = axios.delete(uri, {params: data})
+    handle(promise, next)
   }
 }
