@@ -53,12 +53,21 @@ Use JSON output by default when another tool or script will parse the result:
 
 ```bash
 gocron-cli --json task list
+gocron-cli --json task list --page 2 --pagesize 50
+gocron-cli --json task list --name sync --tag ops --status 1
 gocron-cli --json task get 123
 gocron-cli --json task logs 123
 gocron-cli --json host list
 ```
 
 Without `--json`, the CLI prints the API message and raw data for quick human inspection.
+
+`task list` supports these query flags:
+
+- Pagination: `--page`, `--page-size`, `--pagesize`
+- Filters: `--id`, `--host-id`, `--name`, `--protocol`, `--tag`, `--command`, `--status`
+
+Use `--pagesize` as a convenient alias for the API's `page_size`. If both `--page-size` and `--pagesize` are present, `--page-size` wins.
 
 ## Task Changes
 

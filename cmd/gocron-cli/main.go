@@ -173,8 +173,8 @@ func taskCommand() cli.Command {
 	return cli.Command{
 		Name: "task",
 		Subcommands: []cli.Command{
-			{Name: "list", Action: authedAction(func(ctx *cli.Context, prof *profile) error {
-				return printResponse(ctx, prof, http.MethodGet, "/tasks", nil)
+			{Name: "list", Flags: taskListFlags(), Action: authedAction(func(ctx *cli.Context, prof *profile) error {
+				return printResponse(ctx, prof, http.MethodGet, "/tasks", taskListValues(ctx))
 			})},
 			{Name: "get", Usage: "get <id>", Action: authedAction(func(ctx *cli.Context, prof *profile) error {
 				return printResponse(ctx, prof, http.MethodGet, "/tasks/"+ctx.Args().First(), nil)
@@ -203,6 +203,55 @@ func taskCommand() cli.Command {
 				return printResponse(ctx, prof, http.MethodPost, "/tasks/"+ctx.Args().Get(0)+"/runs/"+ctx.Args().Get(1)+"/stop", nil)
 			})},
 		},
+	}
+}
+
+func taskListFlags() []cli.Flag {
+	return []cli.Flag{
+		cli.IntFlag{Name: "page"},
+		cli.IntFlag{Name: "page-size"},
+		cli.IntFlag{Name: "pagesize"},
+		cli.IntFlag{Name: "id"},
+		cli.IntFlag{Name: "host-id"},
+		cli.StringFlag{Name: "name"},
+		cli.IntFlag{Name: "protocol"},
+		cli.StringFlag{Name: "tag"},
+		cli.StringFlag{Name: "command"},
+		cli.IntFlag{Name: "status"},
+	}
+}
+
+func taskListValues(ctx *cli.Context) url.Values {
+	values := url.Values{}
+	setIntFlag(values, ctx, "page", "page")
+	pageSize := ctx.Int("page-size")
+	if pageSize <= 0 {
+		pageSize = ctx.Int("pagesize")
+	}
+	if pageSize > 0 {
+		values.Set("page_size", strconv.Itoa(pageSize))
+	}
+	setIntFlag(values, ctx, "id", "id")
+	setIntFlag(values, ctx, "host-id", "host_id")
+	setStringFlag(values, ctx, "name", "name")
+	setIntFlag(values, ctx, "protocol", "protocol")
+	setStringFlag(values, ctx, "tag", "tag")
+	setStringFlag(values, ctx, "command", "command")
+	setIntFlag(values, ctx, "status", "status")
+	return values
+}
+
+func setIntFlag(values url.Values, ctx *cli.Context, flagName, queryName string) {
+	value := ctx.Int(flagName)
+	if value > 0 {
+		values.Set(queryName, strconv.Itoa(value))
+	}
+}
+
+func setStringFlag(values url.Values, ctx *cli.Context, flagName, queryName string) {
+	value := strings.TrimSpace(ctx.String(flagName))
+	if value != "" {
+		values.Set(queryName, value)
 	}
 }
 
@@ -287,6 +336,7 @@ func refresh(prof *profile) error {
 func doRequest(prof *profile, method, path string, values url.Values) (*apiResponse, error) {
 	endpoint := prof.Server + "/api/agent/v1" + path
 	if method == http.MethodGet {
+		endpoint = endpointWithQuery(endpoint, values)
 		req, err := http.NewRequest(method, endpoint, nil)
 		if err != nil {
 			return nil, err
@@ -295,6 +345,13 @@ func doRequest(prof *profile, method, path string, values url.Values) (*apiRespo
 		return send(req)
 	}
 	return formRequest(method, endpoint, prof.AccessToken, values)
+}
+
+func endpointWithQuery(endpoint string, values url.Values) string {
+	if len(values) == 0 {
+		return endpoint
+	}
+	return endpoint + "?" + values.Encode()
 }
 
 func postForm(endpoint, accessToken string, values url.Values) (*apiResponse, error) {
