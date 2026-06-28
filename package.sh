@@ -179,7 +179,7 @@ run() {
 
 package_gocron() {
     BINARY_NAME='gocron'
-    MAIN_FILE="./cmd/gocron/gocron.go"
+    MAIN_FILE="./cmd/gocron"
     INCLUDE_FILE=()
 
 
@@ -188,7 +188,7 @@ package_gocron() {
 
 package_gocron_node() {
     BINARY_NAME='gocron-node'
-    MAIN_FILE="./cmd/node/node.go"
+    MAIN_FILE="./cmd/node"
     INCLUDE_FILE=()
 
     run
@@ -196,7 +196,7 @@ package_gocron_node() {
 
 package_gocron_cli() {
     BINARY_NAME='gocron-cli'
-    MAIN_FILE="./cmd/gocron-cli/main.go"
+    MAIN_FILE="./cmd/gocron-cli"
     INCLUDE_FILE=()
 
     run
