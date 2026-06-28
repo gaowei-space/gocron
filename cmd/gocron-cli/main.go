@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	AppVersion = "1.6.4"
+	AppVersion = "1.6.5"
 	BuildDate  string
 	GitCommit  string
 )
@@ -31,10 +31,11 @@ type config struct {
 }
 
 type profile struct {
-	Server       string `json:"server"`
-	DeviceId     string `json:"device_id"`
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
+	Server               string `json:"server"`
+	DeviceId             string `json:"device_id"`
+	AccessToken          string `json:"access_token"`
+	RefreshToken         string `json:"refresh_token"`
+	AccessTokenExpiresAt int64  `json:"access_token_expires_at,omitempty"`
 }
 
 type apiResponse struct {
@@ -45,9 +46,22 @@ type apiResponse struct {
 }
 
 type apiError struct {
+	Code      int
 	Message   string
 	RequestId string
 }
+
+type tokenData struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int64  `json:"expires_in"`
+}
+
+type tokenRefreshClient func(*profile) (*tokenData, error)
+
+const accessTokenRefreshSkew = 2 * time.Minute
+
+var configPathOverride func() (string, error)
 
 func (e apiError) Error() string {
 	if e.RequestId == "" {
@@ -127,6 +141,7 @@ func loginCommand() cli.Command {
 				var tokenData struct {
 					AccessToken  string `json:"access_token"`
 					RefreshToken string `json:"refresh_token"`
+					ExpiresIn    int64  `json:"expires_in"`
 					DeviceId     string `json:"device_id"`
 				}
 				if err := decodeData(tokenResp, &tokenData); err != nil {
@@ -137,10 +152,11 @@ func loginCommand() cli.Command {
 					cfg.Profiles = map[string]*profile{}
 				}
 				cfg.Profiles[ctx.GlobalString("profile")] = &profile{
-					Server:       server,
-					DeviceId:     tokenData.DeviceId,
-					AccessToken:  tokenData.AccessToken,
-					RefreshToken: tokenData.RefreshToken,
+					Server:               server,
+					DeviceId:             tokenData.DeviceId,
+					AccessToken:          tokenData.AccessToken,
+					RefreshToken:         tokenData.RefreshToken,
+					AccessTokenExpiresAt: tokenExpiresAt(time.Now(), tokenData.ExpiresIn),
 				}
 				if err := saveConfig(cfg); err != nil {
 					return err
@@ -278,8 +294,8 @@ func authedAction(fn func(*cli.Context, *profile) error) func(*cli.Context) erro
 		if err != nil {
 			return err
 		}
-		if prof.AccessToken == "" {
-			if err := refresh(prof); err != nil {
+		if !accessTokenFresh(prof, time.Now()) {
+			if err := refreshProfile(ctx.GlobalString("profile"), prof, time.Now(), defaultRefreshClient); err != nil {
 				return err
 			}
 		}
@@ -289,8 +305,8 @@ func authedAction(fn func(*cli.Context, *profile) error) func(*cli.Context) erro
 
 func printResponse(ctx *cli.Context, prof *profile, method, path string, values url.Values) error {
 	resp, err := doRequest(prof, method, path, values)
-	if err != nil {
-		if refresh(prof) == nil {
+	if shouldRefreshAfterError(err) {
+		if forceRefreshProfile(ctx.GlobalString("profile"), prof, time.Now(), defaultRefreshClient) == nil {
 			resp, err = doRequest(prof, method, path, values)
 		}
 	}
@@ -309,28 +325,91 @@ func printResponse(ctx *cli.Context, prof *profile, method, path string, values 
 	return nil
 }
 
-func refresh(prof *profile) error {
+func shouldRefreshAfterError(err error) bool {
+	if err == nil {
+		return false
+	}
+	apiErr, ok := err.(apiError)
+	if !ok {
+		return false
+	}
+	return apiErr.Code == 401 || apiErr.Code == 403
+}
+
+func defaultRefreshClient(prof *profile) (*tokenData, error) {
 	resp, err := postForm(prof.Server+"/api/agent/v1/auth/token/refresh", "", url.Values{"refresh_token": {prof.RefreshToken}})
+	if err != nil {
+		return nil, err
+	}
+	var data tokenData
+	if err := decodeData(resp, &data); err != nil {
+		return nil, err
+	}
+	return &data, nil
+}
+
+func refreshProfile(name string, prof *profile, now time.Time, client tokenRefreshClient) error {
+	return refreshProfileWithForce(name, prof, now, client, false)
+}
+
+func forceRefreshProfile(name string, prof *profile, now time.Time, client tokenRefreshClient) error {
+	return refreshProfileWithForce(name, prof, now, client, true)
+}
+
+func refreshProfileWithForce(name string, prof *profile, now time.Time, client tokenRefreshClient, force bool) error {
+	unlock, err := lockConfig()
 	if err != nil {
 		return err
 	}
-	var data struct {
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
-	}
-	if err := decodeData(resp, &data); err != nil {
+	defer unlock()
+
+	cfg, err := loadConfig()
+	if err != nil {
 		return err
 	}
-	prof.AccessToken = data.AccessToken
-	prof.RefreshToken = data.RefreshToken
-	cfg, _ := loadConfig()
-	for _, p := range cfg.Profiles {
-		if p.DeviceId == prof.DeviceId {
-			p.AccessToken = prof.AccessToken
-			p.RefreshToken = prof.RefreshToken
+	current := cfg.Profiles[name]
+	if current == nil {
+		current = prof
+		cfg.Profiles[name] = current
+	}
+	if current.DeviceId == prof.DeviceId {
+		if !force && accessTokenFresh(current, now) {
+			copyProfile(prof, current)
+			return nil
+		}
+		if force && current.AccessToken != prof.AccessToken && accessTokenFresh(current, now) {
+			copyProfile(prof, current)
+			return nil
 		}
 	}
+
+	data, err := client(current)
+	if err != nil {
+		return err
+	}
+	current.AccessToken = data.AccessToken
+	current.RefreshToken = data.RefreshToken
+	current.AccessTokenExpiresAt = tokenExpiresAt(now, data.ExpiresIn)
+	copyProfile(prof, current)
 	return saveConfig(cfg)
+}
+
+func accessTokenFresh(prof *profile, now time.Time) bool {
+	return prof != nil &&
+		prof.AccessToken != "" &&
+		prof.AccessTokenExpiresAt > now.Add(accessTokenRefreshSkew).Unix()
+}
+
+func tokenExpiresAt(now time.Time, expiresIn int64) int64 {
+	return now.Add(time.Duration(expiresIn) * time.Second).Unix()
+}
+
+func copyProfile(dst, src *profile) {
+	dst.Server = src.Server
+	dst.DeviceId = src.DeviceId
+	dst.AccessToken = src.AccessToken
+	dst.RefreshToken = src.RefreshToken
+	dst.AccessTokenExpiresAt = src.AccessTokenExpiresAt
 }
 
 func doRequest(prof *profile, method, path string, values url.Values) (*apiResponse, error) {
@@ -386,7 +465,7 @@ func send(req *http.Request) (*apiResponse, error) {
 	}
 	parsed.RequestId = resp.Header.Get("X-Request-Id")
 	if parsed.Code != 0 {
-		return nil, apiError{Message: parsed.Message, RequestId: parsed.RequestId}
+		return nil, apiError{Code: parsed.Code, Message: parsed.Message, RequestId: parsed.RequestId}
 	}
 	return &parsed, nil
 }
@@ -522,6 +601,9 @@ func saveConfig(cfg *config) error {
 }
 
 func configPath() (string, error) {
+	if configPathOverride != nil {
+		return configPathOverride()
+	}
 	current, err := user.Current()
 	if err != nil {
 		return "", err

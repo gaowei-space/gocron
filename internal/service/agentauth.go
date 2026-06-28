@@ -16,6 +16,7 @@ const AgentAccessTokenDuration = 30 * time.Minute
 const AgentDeviceAuthorizationDuration = 30 * 24 * time.Hour
 const AgentDeviceCodeDuration = 10 * time.Minute
 const AgentDeviceCodePollInterval = 5
+const AgentRefreshReplayGracePeriod = 30 * time.Second
 
 var ErrAgentRefreshTokenInvalid = errors.New("invalid refresh token")
 
@@ -58,6 +59,13 @@ func RotateAgentRefreshToken(device *AgentDeviceSession, presentedToken string) 
 	device.RefreshTokenHash = HashAgentToken(nextToken)
 
 	return nextToken, nil
+}
+
+func ShouldRevokeAgentRefreshReplay(rotatedAt, now time.Time) bool {
+	if rotatedAt.IsZero() {
+		return true
+	}
+	return now.Sub(rotatedAt) > AgentRefreshReplayGracePeriod
 }
 
 func GenerateAgentAccessToken(uid int, deviceId, clientType, clientVersion string) (string, error) {

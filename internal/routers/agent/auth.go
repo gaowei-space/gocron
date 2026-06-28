@@ -175,8 +175,12 @@ func RefreshToken(ctx *macaron.Context) string {
 	if err != nil || !exists {
 		replayed := new(models.AgentDeviceAuthorization)
 		if replayExists, replayErr := replayed.FindByPreviousTokenHash(service.HashAgentToken(refreshToken)); replayErr == nil && replayExists {
-			replayed.UpdateById(replayed.Id, models.CommonMap{"revoked_at": time.Now()})
-			Audit(ctx, "auth.token.refresh", "device_authorization", replayed.DeviceId, "refresh token replay", false, "refresh token replay")
+			if service.ShouldRevokeAgentRefreshReplay(replayed.UpdatedAt, time.Now()) {
+				replayed.UpdateById(replayed.Id, models.CommonMap{"revoked_at": time.Now()})
+				Audit(ctx, "auth.token.refresh", "device_authorization", replayed.DeviceId, "refresh token replay", false, "refresh token replay")
+			} else {
+				Audit(ctx, "auth.token.refresh", "device_authorization", replayed.DeviceId, "refresh token replay grace", false, "refresh token replay grace")
+			}
 		} else {
 			Audit(ctx, "auth.token.refresh", "device_authorization", "", "refresh token invalid", false, "refresh token invalid")
 		}

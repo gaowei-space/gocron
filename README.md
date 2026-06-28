@@ -8,11 +8,18 @@
 
 ## 项目简介
 
-> 该项目fork于[ouqiang/gocron](https://github.com/ouqiang/gocron)，依据自己喜好和实际需求进行了功能迭代，当前发布 **1.6.4** 版本。
+> 该项目fork于[ouqiang/gocron](https://github.com/ouqiang/gocron)，依据自己喜好和实际需求进行了功能迭代，当前发布 **1.6.5** 版本。
 
 **[Gocron-定时任务管理系统](https://github.com/gaowei-space/gocron)**，使用Go语言开发的轻量级定时任务集中调度和管理系统, 用于替代**Linux-crontab**
 
 ## 迭代
+
+### v1.6.5
+
+* 优化 `gocron-cli` 本地认证刷新逻辑，记录 access token 过期时间并提前刷新
+* CLI 刷新 refresh token 时增加本地锁，避免多个进程并发刷新导致设备授权被撤销
+* 普通业务错误不再触发 token 刷新，减少无意义的 refresh token 轮换
+* 服务端对刚轮换后的 refresh token 重放增加短时间宽限，降低并发调用时误撤销设备授权的概率
 
 ### v1.6.4
 

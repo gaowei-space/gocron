@@ -1,6 +1,9 @@
 package service
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestAgentAuthHashTokenIsStableAndDoesNotReturnPlaintext(t *testing.T) {
 	token := "refresh-token-value"
@@ -38,5 +41,16 @@ func TestAgentAuthRefreshRotationRejectsReusedToken(t *testing.T) {
 
 	if _, err := RotateAgentRefreshToken(&device, oldToken); err == nil {
 		t.Fatal("expected reused refresh token to be rejected")
+	}
+}
+
+func TestShouldRevokeAgentRefreshReplayAllowsShortConcurrencyWindow(t *testing.T) {
+	now := time.Unix(1000, 0)
+
+	if ShouldRevokeAgentRefreshReplay(now.Add(-AgentRefreshReplayGracePeriod/2), now) {
+		t.Fatal("expected recent refresh replay to avoid device revoke")
+	}
+	if !ShouldRevokeAgentRefreshReplay(now.Add(-AgentRefreshReplayGracePeriod-time.Second), now) {
+		t.Fatal("expected old refresh replay to revoke device")
 	}
 }
