@@ -1,6 +1,6 @@
 ---
 name: gocron-cli
-description: "Use when Codex needs to operate a gocron scheduler through the gocron-cli command line client: browser-login authorization, task listing/detail/create/update/enable/disable/run/stop/logs, host listing, JSON output for automation, or troubleshooting gocron-cli auth/profile issues. Use for gocron cron operations instead of calling private REST APIs directly."
+description: "Use when Codex needs to operate a gocron scheduler through the gocron-cli command line client: browser-login authorization, task listing/detail/create/update/enable/disable/run/stop/logs, host listing, JSON output for automation, troubleshooting auth/profile issues, or fixing task create/update failures caused by write-form parameters. Use for gocron cron operations instead of calling private REST APIs directly."
 ---
 
 # gocron-cli
@@ -71,7 +71,17 @@ Use `--pagesize` as a convenient alias for the API's `page_size`. If both `--pag
 
 ## Task Changes
 
-Create and update tasks from a flat JSON or simple `key: value` YAML file. The parser supports scalar strings, numbers, and booleans only; nested YAML is not supported.
+Create and update tasks from a flat JSON or simple `key: value` YAML file. Prefer JSON for automation and for values that contain shell quoting, `:`, `#`, or long commands. The YAML parser is intentionally simple: one `key: value` per line, scalar values only, no nested structures.
+
+Before writing a task, gather the concrete IDs and a reference shape:
+
+```bash
+gocron-cli --json host list
+gocron-cli --json task list --name similar-name
+gocron-cli --json task get 123
+```
+
+Do not guess `host_id`, notification receiver IDs, or whether a task should be HTTP vs shell. For shell/RPC tasks, `host_id` is a comma-separated list of host IDs from `host list`; host names are not accepted in write files. For HTTP tasks, omit `host_id` or set it to an empty string.
 
 Omitted optional fields use the Web create-page defaults:
 
@@ -88,6 +98,8 @@ Omitted optional fields use the Web create-page defaults:
 - `status: 1` 启用
 - `tag`、`dependency_task_id`、`host_id`、`notify_receiver_id`、`notify_keyword`、`remark` default to empty strings.
 
+Use full write files for create and update unless the task is trivial. The server validates and rewrites several fields, so sparse files are the main source of create/update failures.
+
 Required fields for a default shell parent task:
 
 ```yaml
@@ -99,15 +111,29 @@ host_id: "1"
 
 Required-field rules:
 
-- `name` is always required.
-- `command` is always required. For HTTP tasks it must be an `http://` or `https://` URL.
-- `spec` is required for parent tasks (`level: 1`); child tasks (`level: 2`) do not use `spec`.
-- `host_id` is required for shell/RPC tasks (`protocol: 2`); HTTP tasks (`protocol: 1`) do not use `host_id`.
-- Notification receiver fields are required only when notification is enabled.
+- `name` is always required, max 32 characters, and must be unique among enabled tasks.
+- `command` is always required, max 256 characters. For HTTP tasks it must start with `http://` or `https://`.
+- `spec` is required for parent tasks (`level: 1`) and should use the 6-field gocron format with seconds, for example `0 0 2 * * *`. Child tasks (`level: 2`) do not use `spec`.
+- `host_id` is required for shell/RPC tasks (`protocol: 2`); use comma-separated numeric host IDs. HTTP tasks (`protocol: 1`) do not use `host_id`.
+- `protocol` must be `1` for HTTP or `2` for shell/RPC.
+- `http_method` must be `1` for GET or `2` for POST. For HTTP tasks, `timeout` must be `0..300`; for shell/RPC tasks, `timeout` can be `0..86400`.
+- `dependency_status` must be `1` strong or `2` weak, even when there are no dependencies.
+- `multi` is write-form encoded: `1` allows concurrent runs; `2` means single-instance behavior.
+- `retry_times` must be `0..10`; `retry_interval` must be `0..3600`.
+- `notify_status` is write-form encoded: `1` no notification, `2` failure notification, `3` completion notification, `4` keyword notification. When notification is enabled (`2..4`) and `notify_type` is not webhook (`4` in write form), provide `notify_receiver_id`.
 
-For `task update`, omitted optional fields are still filled with Web defaults. To preserve existing optional values, inspect the task first and include those values in the update file.
+For `task update`, omitted optional fields are still filled with Web defaults. To preserve existing optional values, inspect the task first and include every writable field in the update file. Do not paste `task get` JSON directly into an update file: `task get` returns storage-format values, while `task create/update` expects write-form values.
 
-Full example with explicit Web defaults:
+When converting `task get` output into a write file:
+
+- Keep: `name`, `level`, `dependency_task_id`, `dependency_status`, `spec`, `protocol`, `command`, `http_method`, `timeout`, `retry_times`, `retry_interval`, `tag`, `remark`, `notify_receiver_id`, `notify_keyword`, `status`.
+- Convert `multi`: if detail `multi` is `1`, write `multi: 1`; otherwise write `multi: 2`.
+- Convert `notify_status`: write `detail.notify_status + 1`.
+- Convert `notify_type`: write `detail.notify_type + 1`.
+- Convert hosts: write `host_id` as comma-separated IDs from `detail.hosts[].id`; do not include the nested `hosts` array.
+- Do not include read-only fields such as `id`, `created`, `updated`, `deleted`, `creater`, `updater`, `next_run_time`, or nested `hosts`.
+
+Full shell/RPC parent-task example with explicit Web defaults:
 
 ```yaml
 name: nightly-sync
@@ -131,7 +157,40 @@ notify_keyword: ""
 status: 1
 ```
 
+Full HTTP parent-task example:
+
+```yaml
+name: healthcheck
+level: 1
+dependency_status: 1
+dependency_task_id: ""
+spec: "0 */5 * * * *"
+protocol: 1
+http_method: 1
+command: "https://example.com/health"
+host_id: ""
+timeout: 30
+multi: 2
+retry_times: 0
+retry_interval: 0
+tag: "ops"
+remark: ""
+notify_status: 1
+notify_type: 2
+notify_receiver_id: ""
+notify_keyword: ""
+status: 1
+```
+
 Use `protocol: 1` for HTTP tasks and `protocol: 2` for shell/RPC tasks. HTTP tasks use `command` as the URL and may set `http_method` to `1` or `2`; shell tasks require `host_id`.
+
+Recommended write workflow:
+
+1. Read hosts and a similar task when available.
+2. Create a complete `task.json` or `task.yaml` with only writable scalar fields.
+3. Run `gocron-cli task create --file task.json` or `gocron-cli task update <id> --file task.json`.
+4. Immediately verify with `gocron-cli --json task list --name <name>` and then `gocron-cli --json task get <id>`.
+5. If the server returns `表单验证失败`, `请选择主机名`, `请输入正确的URL地址`, cron parse errors, retry range errors, or notification receiver errors, fix the file fields rather than retrying unchanged.
 
 Run changes:
 
